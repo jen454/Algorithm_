@@ -12,10 +12,10 @@ class Solution {
                 list.add(i);
             }
         }
-        int[] answer = new int[list.size()];
+        int[] ans = new int[list.size()];
         for (int i=0; i<list.size(); i++) {
-            answer[i] = list.get(i);
+            ans[i] = list.get(i);
         }
-        return answer;
+        return ans;
     }
 }

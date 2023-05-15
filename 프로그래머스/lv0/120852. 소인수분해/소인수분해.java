@@ -3,6 +3,7 @@ import java.util.ArrayList;
 
 class Solution {
     public int[] solution(int n) {
+        int[] ans = {};
         List<Integer> list = new ArrayList<>();
         for (int i=2; i<=n; i++) {
             if (n%i==0) {
@@ -12,10 +13,7 @@ class Solution {
                 list.add(i);
             }
         }
-        int[] ans = new int[list.size()];
-        for (int i=0; i<list.size(); i++) {
-            ans[i] = list.get(i);
-        }
+        ans = list.stream().distinct().mapToInt(Integer::intValue).toArray();
         return ans;
     }
 }

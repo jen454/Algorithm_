@@ -1,10 +1,15 @@
 name: Move LeetCode Solutions
-
 on:
   workflow_dispatch:  # 수동 실행 옵션 유지
   push:
     paths:
       - '[0-9][0-9][0-9][0-9]-*/**'  # LeetHub가 생성하는 폴더 패턴 (예: 0020-valid-parentheses)
+
+# LeetHub가 README/코드를 거의 동시에 두 번 커밋하면서 워크플로우가 겹쳐 실행되는 걸 방지.
+# 같은 그룹의 실행은 동시에 돌지 않고, 순서대로 하나씩 대기했다가 실행됨.
+concurrency:
+  group: move-leetcode-solutions
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -23,23 +28,35 @@ jobs:
           # 디버깅을 위한 현재 디렉토리 내용 출력
           echo "Current directory contents:"
           ls -la
-          
+
           # LeetCode 폴더가 없다면 생성
           mkdir -p LeetCode
-          
+
           # 변경된 파일 목록 확인
           echo "Changed files in this push:"
-          git diff --name-only HEAD^ HEAD
-          
+          git diff --name-only HEAD^ HEAD || true
+
           # LeetHub가 생성한 폴더들을 LeetCode 폴더로 이동
+          # 주의: LeetCode/문제명 폴더가 이미 존재할 수 있음
+          # (README 커밋과 코드 커밋이 각각 별도 트리거를 일으키면서,
+          #  먼저 옮겨진 폴더에 나중 커밋이 같은 이름으로 다시 루트에 파일을 만드는 경우가 있음)
+          # 이 경우 mv로 그냥 옮기면 LeetCode/문제명/문제명 처럼 중첩되므로,
+          # 목적지가 이미 있으면 내용물만 병합하고 원본은 삭제한다.
           found=0
           for d in [0-9][0-9][0-9][0-9]-*; do
             if [ -d "$d" ]; then
-              echo "Moving directory: $d"
-              mv "$d" "LeetCode/" && found=1
+              if [ -d "LeetCode/$d" ]; then
+                echo "Merging into existing directory: LeetCode/$d"
+                cp -a "$d"/. "LeetCode/$d/"
+                rm -rf "$d"
+              else
+                echo "Moving directory: $d"
+                mv "$d" "LeetCode/"
+              fi
+              found=1
             fi
           done
-          
+
           # 이동할 폴더를 찾지 못했을 경우에도 오류로 처리하지 않음
           if [ $found -eq 0 ]; then
             echo "No matching directories found to move"
@@ -47,12 +64,17 @@ jobs:
 
       - name: Commit & Push changes
         run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
           # 변경사항이 있는지 확인
           if git status --porcelain | grep .; then
-            git config --global user.name 'github-actions[bot]'
-            git config --global user.email 'github-actions[bot]@users.noreply.github.com'
             git add -A
             git commit -m "chore: Move LeetCode solutions to LeetCode folder"
+
+            # push 하기 직전, 그 사이 다른 워크플로우 실행이 먼저 push 했을 수 있으므로
+            # 최신 원격 상태를 rebase로 반영한 뒤 push (race condition 방지)
+            git pull --rebase origin "${GITHUB_REF_NAME}"
             git push
           else
             echo "No changes to commit"

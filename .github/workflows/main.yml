@@ -19,63 +19,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # 최근 커밋 기록을 가져오기 위해 설정
+          fetch-depth: 0  # 전체 히스토리 (아래에서 origin/main으로 계속 리셋하며 사용)
 
-      - name: Move LeetCode solutions
-        run: |
-          # 디버깅을 위한 현재 디렉토리 내용 출력
-          echo "Current directory contents:"
-          ls -la
-
-          # LeetCode 폴더가 없다면 생성
-          mkdir -p LeetCode
-
-          # 변경된 파일 목록 확인
-          echo "Changed files in this push:"
-          git diff --name-only HEAD^ HEAD || true
-
-          # LeetHub가 생성한 폴더들을 LeetCode 폴더로 이동
-          # 주의: LeetCode/문제명 폴더가 이미 존재할 수 있음
-          # (README 커밋과 코드 커밋이 각각 별도 트리거를 일으키면서,
-          #  먼저 옮겨진 폴더에 나중 커밋이 같은 이름으로 다시 루트에 파일을 만드는 경우가 있음)
-          # 이 경우 mv로 그냥 옮기면 LeetCode/문제명/문제명 처럼 중첩되므로,
-          # 목적지가 이미 있으면 내용물만 병합하고 원본은 삭제한다.
-          found=0
-          for d in [0-9][0-9][0-9][0-9]-*; do
-            if [ -d "$d" ]; then
-              if [ -d "LeetCode/$d" ]; then
-                echo "Merging into existing directory: LeetCode/$d"
-                cp -a "$d"/. "LeetCode/$d/"
-                rm -rf "$d"
-              else
-                echo "Moving directory: $d"
-                mv "$d" "LeetCode/"
-              fi
-              found=1
-            fi
-          done
-
-          # 이동할 폴더를 찾지 못했을 경우에도 오류로 처리하지 않음
-          if [ $found -eq 0 ]; then
-            echo "No matching directories found to move"
-          fi
-
-      - name: Commit & Push changes
+      - name: Move solutions and push (retry from fresh state each time)
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          mkdir -p LeetCode
 
-          # 변경사항이 있는지 확인
-          if git status --porcelain | grep .; then
+          # 중요: git rebase는 "폴더 이동(rename)" + "그 폴더 안에 파일 추가"가 겹치면
+          # 자동으로 못 풀고 충돌 처리하는 경우가 있음 (rename/add 충돌).
+          # 그래서 로컬 커밋을 재사용해서 rebase하는 대신,
+          # 재시도할 때마다 원격 최신 상태로 완전히 리셋한 뒤 이동 로직을 처음부터 다시 계산한다.
+          # 이러면 애초에 rename 히스토리 충돌 자체가 생기지 않는다.
+          for attempt in 1 2 3 4 5; do
+            echo "=== Attempt $attempt ==="
+
+            git fetch origin main
+            git reset --hard origin/main
+            mkdir -p LeetCode
+
+            found=0
+            for d in [0-9][0-9][0-9][0-9]-*; do
+              if [ -d "$d" ]; then
+                if [ -d "LeetCode/$d" ]; then
+                  echo "Merging into existing directory: LeetCode/$d"
+                  cp -a "$d"/. "LeetCode/$d/"
+                  rm -rf "$d"
+                else
+                  echo "Moving directory: $d"
+                  mv "$d" "LeetCode/"
+                fi
+                found=1
+              fi
+            done
+
+            if [ $found -eq 0 ] || ! git status --porcelain | grep -q .; then
+              echo "No changes to commit"
+              break
+            fi
+
             git add -A
             git commit -m "chore: Move LeetCode solutions to LeetCode folder"
 
-            # push 하기 직전, 그 사이 다른 워크플로우 실행이 먼저 push 했을 수 있으므로
-            # 최신 원격 상태를 rebase로 반영한 뒤 push (race condition 방지)
-            git pull --rebase origin "${GITHUB_REF_NAME}"
-            git push
-          else
-            echo "No changes to commit"
-          fi
+            if git push origin HEAD:main; then
+              echo "Push succeeded on attempt $attempt"
+              break
+            fi
+
+            echo "Push failed on attempt $attempt (race with another run), retrying from fresh state..."
+            sleep $((RANDOM % 5 + 1))  # 재충돌 확률을 줄이기 위한 랜덤 대기
+
+            if [ "$attempt" -eq 5 ]; then
+              echo "Push failed after 5 attempts"
+              exit 1
+            fi
+          done

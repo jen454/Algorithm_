@@ -18,6 +18,7 @@
 ## Math
 | Problem Name | Difficulty |
 | ------- | ------- |
+| [0009-palindrome-number](https://github.com/jen454/Algorithm_/tree/main/0009-palindrome-number/) | Easy |
 | [0412-fizz-buzz](https://github.com/jen454/Algorithm_/tree/master/0412-fizz-buzz) |
 ## String
 | Problem Name | Difficulty |

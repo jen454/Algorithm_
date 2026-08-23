@@ -3,6 +3,7 @@
 ## Array
 | Problem Name | Difficulty |
 | ------- | ------- |
+| [0001-two-sum](https://github.com/jen454/Algorithm_/tree/main/0001-two-sum/) | Easy |
 | [1480-running-sum-of-1d-array](https://github.com/jen454/Algorithm_/tree/master/1480-running-sum-of-1d-array) |
 | [1672-richest-customer-wealth](https://github.com/jen454/Algorithm_/tree/master/1672-richest-customer-wealth) |
 | [3069-distribute-elements-into-two-arrays-i](https://github.com/jen454/Algorithm_/tree/main/LeetCode/Easy/3069-distribute-elements-into-two-arrays-i/) | Easy |
@@ -31,6 +32,7 @@
 ## Hash Table
 | Problem Name | Difficulty |
 | ------- | ------- |
+| [0001-two-sum](https://github.com/jen454/Algorithm_/tree/main/0001-two-sum/) | Easy |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
 ## Counting
 | Problem Name | Difficulty |

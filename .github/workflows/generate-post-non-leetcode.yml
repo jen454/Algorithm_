@@ -1,0 +1,149 @@
+name: Generate Post (백준/프로그래머스)
+
+on:
+  workflow_dispatch:  # 수동 실행 옵션
+  push:
+    paths:
+      - '백준/**'
+      - '프로그래머스/**'
+
+# 여러 커밋이 연달아 push될 때 동시에 돌면서 posts/ push가 충돌하는 걸 방지.
+concurrency:
+  group: generate-post-non-leetcode
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  generate-post:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # 직전 커밋과 비교하기 위해 최소 2개 필요
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Detect changed problem directories
+        id: detect
+        env:
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          # core.quotePath=false: 한글 경로가 "\355\225\234..." 로 이스케이프되는 걸 막는다.
+          GIT_DIFF='git -c core.quotePath=false diff --name-only'
+
+          use_fallback=0
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            # 최초 push이거나 workflow_dispatch로 수동 실행한 경우 before가 비어 있다.
+            echo "before 값이 비어 있음 -> HEAD~1 fallback"
+            use_fallback=1
+          elif ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
+            # force-push 등으로 before 커밋이 사라졌거나 shallow clone에 없는 경우.
+            echo "before 커밋($BEFORE)을 찾을 수 없음 -> HEAD~1 fallback"
+            use_fallback=1
+          fi
+
+          if [ "$use_fallback" -eq 0 ]; then
+            if ! $GIT_DIFF "$BEFORE" "$SHA" > /tmp/changed.txt 2>/dev/null; then
+              echo "diff 실패 -> HEAD~1 fallback"
+              use_fallback=1
+            fi
+          fi
+
+          if [ "$use_fallback" -eq 1 ]; then
+            if ! $GIT_DIFF HEAD~1 HEAD > /tmp/changed.txt 2>/dev/null; then
+              # 커밋이 하나뿐이라 HEAD~1이 없는 경우: HEAD 커밋의 파일 목록을 그대로 사용.
+              echo "HEAD~1도 없음 -> HEAD 커밋의 파일 목록 사용"
+              git -c core.quotePath=false show --name-only --pretty=format: HEAD > /tmp/changed.txt
+            fi
+          fi
+
+          echo "--- 변경된 파일 ---"
+          cat /tmp/changed.txt
+
+          # 백준/프로그래머스는 "<플랫폼>/<티어 또는 레벨>/<문제 폴더>" 2단계 구조다.
+          # (예: 백준/Bronze/2753. 윤년, 프로그래머스/0/181858. 무작위로 K개의 수 뽑기)
+          # 따라서 앞 3개 경로 조각을 문제 폴더로 잡고 중복을 제거한다.
+          grep -E '^(백준|프로그래머스)/' /tmp/changed.txt \
+            | awk -F/ 'NF >= 3 { print $1 "/" $2 "/" $3 }' \
+            | sort -u > /tmp/dirs.txt || true
+
+          echo "--- 대상 문제 폴더 ---"
+          cat /tmp/dirs.txt
+
+      - name: Generate blog post drafts
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          if [ ! -s /tmp/dirs.txt ]; then
+            echo "대상 폴더 없음"
+            exit 0
+          fi
+
+          # 폴더명에 공백이 있으므로(예: "2753. 윤년") 줄 단위로 읽는다.
+          while IFS= read -r dir; do
+            [ -n "$dir" ] || continue
+            if [ ! -d "$dir" ]; then
+              # 문제 폴더가 삭제된 커밋이면 건너뛴다.
+              echo "::warning::폴더를 찾을 수 없어 건너뜀: $dir"
+              continue
+            fi
+
+            # 연동 확장이 README와 코드를 별도 커밋으로 올리는 경우가 있어,
+            # 둘 다 모였을 때만 생성한다(중복 호출/반쪽짜리 포스트 방지).
+            if [ ! -f "$dir/README.md" ]; then
+              echo "::notice::README.md가 아직 없어 건너뜀(다음 커밋에서 처리됨): $dir"
+              continue
+            fi
+            # ls는 인자 중 하나라도 없으면 실패를 반환하므로 find로 판정한다.
+            if [ -z "$(find "$dir" -maxdepth 1 -type f \
+                 \( -name '*.py' -o -name '*.java' -o -name '*.js' -o -name '*.ts' \
+                    -o -name '*.cpp' -o -name '*.c' -o -name '*.go' \) -print -quit)" ]; then
+              echo "::notice::solution 파일이 아직 없어 건너뜀(다음 커밋에서 처리됨): $dir"
+              continue
+            fi
+
+            echo "=== generate_post.py \"$dir\" ==="
+            python scripts/generate_post.py "$dir" || echo "::warning::포스트 생성 실패(계속 진행): $dir"
+          done < /tmp/dirs.txt
+
+      - name: Commit and push generated posts
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          if [ -z "$(git status --porcelain posts/)" ]; then
+            echo "생성된 포스트 변경사항 없음"
+            exit 0
+          fi
+
+          git add posts/
+          git commit -m "docs: auto-generate blog post draft"
+
+          # checkout이 fetch-depth: 2(shallow)라 이 상태로 rebase하면 공통 조상을 못 찾을 수 있다.
+          # push 전에 전체 히스토리를 받아 shallow 상태를 푼다.
+          git fetch --unshallow origin main 2>/dev/null || git fetch origin main
+
+          # 다른 워크플로우(LeetCode 이동 등)와 겹칠 수 있으므로 rebase 후 재시도.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              echo "Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            git rebase --abort || true
+            echo "Push failed on attempt $attempt, retrying..."
+            sleep $((RANDOM % 5 + 1))
+          done
+
+          echo "Push failed after 3 attempts"
+          exit 1

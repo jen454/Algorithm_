@@ -17,6 +17,9 @@ permissions:
 jobs:
   move-files:
     runs-on: ubuntu-latest
+    outputs:
+      # 이동된 폴더 목록(콤마 구분). 아래 generate-post 잡이 이 값을 받아서 사용한다.
+      moved_dirs: ${{ steps.export-moved.outputs.moved_dirs }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,6 +44,10 @@ jobs:
             git reset --hard origin/main
             mkdir -p LeetCode
 
+            # 재시도마다 원격 최신 상태에서 이동 로직을 처음부터 다시 계산하므로,
+            # 이동 목록도 매 attempt 시작 시 비우고 새로 기록한다.
+            : > /tmp/moved_dirs.txt
+
             found=0
             for d in [0-9][0-9][0-9][0-9]-*; do
               if [ -d "$d" ]; then
@@ -52,12 +59,14 @@ jobs:
                   echo "Moving directory: $d"
                   mv "$d" "LeetCode/"
                 fi
+                echo "LeetCode/$d" >> /tmp/moved_dirs.txt
                 found=1
               fi
             done
 
             if [ $found -eq 0 ] || ! git status --porcelain | grep -q .; then
               echo "No changes to commit"
+              : > /tmp/moved_dirs.txt  # 커밋된 게 없으면 후속 잡도 돌 필요 없음
               break
             fi
 
@@ -77,3 +86,92 @@ jobs:
               exit 1
             fi
           done
+
+      - name: Export moved directories
+        id: export-moved
+        run: |
+          # 이동된 폴더들을 콤마로 이어붙여 job output으로 내보낸다.
+          # 파일이 없거나 비어 있으면 빈 문자열이 되고, generate-post 잡은 skip된다.
+          moved="$(sort -u /tmp/moved_dirs.txt 2>/dev/null | paste -sd, -)"
+          echo "Moved dirs: ${moved:-(none)}"
+          echo "moved_dirs=$moved" >> "$GITHUB_OUTPUT"
+
+  generate-post:
+    needs: move-files
+    if: needs.move-files.outputs.moved_dirs != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: main          # move-files가 방금 push한 최신 main을 받아야 이동된 폴더가 존재함
+          fetch-depth: 0     # 아래 rebase를 위해 전체 히스토리 필요
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
+
+      - name: Generate blog post drafts
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          MOVED_DIRS: ${{ needs.move-files.outputs.moved_dirs }}
+        run: |
+          # 콤마로 split. 한 폴더가 실패해도 나머지는 계속 진행한다.
+          IFS=',' read -ra dirs <<< "$MOVED_DIRS"
+          for dir in "${dirs[@]}"; do
+            [ -n "$dir" ] || continue
+            if [ ! -d "$dir" ]; then
+              echo "::warning::폴더를 찾을 수 없어 건너뜀: $dir"
+              continue
+            fi
+
+            # LeetHub는 README와 코드를 1초 간격의 별도 커밋 2개로 올린다.
+            # 따라서 첫 번째 실행에는 둘 중 하나만 존재한다.
+            # 둘 다 모였을 때만 생성해서 중복 호출과 반쪽짜리 포스트를 막는다.
+            if [ ! -f "$dir/README.md" ]; then
+              echo "::notice::README.md가 아직 없어 건너뜀(다음 커밋에서 처리됨): $dir"
+              continue
+            fi
+            # ls는 인자 중 하나라도 없으면 실패를 반환하므로 find로 판정한다.
+            if [ -z "$(find "$dir" -maxdepth 1 -type f \
+                 \( -name '*.py' -o -name '*.java' -o -name '*.js' -o -name '*.ts' \
+                    -o -name '*.cpp' -o -name '*.c' -o -name '*.go' \) -print -quit)" ]; then
+              echo "::notice::solution 파일이 아직 없어 건너뜀(다음 커밋에서 처리됨): $dir"
+              continue
+            fi
+
+            echo "=== generate_post.py \"$dir\" ==="
+            python scripts/generate_post.py "$dir" || echo "::warning::포스트 생성 실패(계속 진행): $dir"
+          done
+
+      - name: Commit and push generated posts
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+          if [ -z "$(git status --porcelain posts/)" ]; then
+            echo "생성된 포스트 변경사항 없음"
+            exit 0
+          fi
+
+          git add posts/
+          git commit -m "docs: auto-generate blog post draft"
+
+          # move-files가 계속 push할 수 있으므로 rebase 후 push를 재시도한다.
+          for attempt in 1 2 3; do
+            git fetch origin main
+            if git rebase origin/main && git push origin HEAD:main; then
+              echo "Push succeeded on attempt $attempt"
+              exit 0
+            fi
+            git rebase --abort || true
+            echo "Push failed on attempt $attempt, retrying..."
+            sleep $((RANDOM % 5 + 1))
+          done
+
+          echo "Push failed after 3 attempts"
+          exit 1

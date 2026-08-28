@@ -19,10 +19,12 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0009-palindrome-number](https://github.com/jen454/Algorithm_/tree/main/0009-palindrome-number/) | Easy |
+| [0013-roman-to-integer](https://github.com/jen454/Algorithm_/tree/main/0013-roman-to-integer/) | Easy |
 | [0412-fizz-buzz](https://github.com/jen454/Algorithm_/tree/master/0412-fizz-buzz) |
 ## String
 | Problem Name | Difficulty |
 | ------- | ------- |
+| [0013-roman-to-integer](https://github.com/jen454/Algorithm_/tree/main/0013-roman-to-integer/) | Easy |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
 | [0412-fizz-buzz](https://github.com/jen454/Algorithm_/tree/master/0412-fizz-buzz) |
 ## Simulation
@@ -34,6 +36,7 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0001-two-sum](https://github.com/jen454/Algorithm_/tree/main/0001-two-sum/) | Easy |
+| [0013-roman-to-integer](https://github.com/jen454/Algorithm_/tree/main/0013-roman-to-integer/) | Easy |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
 ## Counting
 | Problem Name | Difficulty |

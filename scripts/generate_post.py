@@ -220,6 +220,20 @@ def call_claude_code(system_prompt: str, user_message: str) -> str:
         )
         sys.exit(1)
 
+    # 시크릿에 값을 붙여넣을 때 줄바꿈이 섞여 들어오는 일이 잦다(값 중간에 들어가기도 한다).
+    # 그대로 두면 CLI가 "Invalid Authorization header value ... contains a line break"로
+    # 실패한다. 토큰에는 공백 문자가 들어갈 일이 없으므로 전부 제거하고 넘긴다.
+    for key in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"):
+        raw = os.environ.get(key)
+        if raw:
+            cleaned = re.sub(r"\s+", "", raw)
+            if cleaned != raw:
+                os.environ[key] = cleaned
+                print(
+                    f"[정리] {key}에 공백/줄바꿈이 섞여 있어 제거했습니다 "
+                    f"({len(raw)}자 -> {len(cleaned)}자). 시크릿 값 자체도 고쳐두세요."
+                )
+
     if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") and not os.environ.get("ANTHROPIC_API_KEY"):
         print(
             "[경고] CLAUDE_CODE_OAUTH_TOKEN(또는 ANTHROPIC_API_KEY)이 설정되어 있지 않습니다. "

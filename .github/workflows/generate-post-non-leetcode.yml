@@ -37,8 +37,12 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
           claude --version
-          # 시크릿 값이 비어 있거나 앞뒤 공백/개행이 섞이면 인증이 실패한다.
-          echo "token length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          # 시크릿 값이 비어 있거나 공백/개행이 섞이면 인증이 실패한다.
+          echo "token length (raw): ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          # 붙여넣기 과정에서 값 중간에 개행이 들어가는 경우가 있어 공백 문자를 제거한다.
+          CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | tr -d '[:space:]')"
+          export CLAUDE_CODE_OAUTH_TOKEN
+          echo "token length (cleaned): ${#CLAUDE_CODE_OAUTH_TOKEN}"
           # 실제 호출이 되는지 최소 프롬프트로 확인. 실패해도 본 작업은 계속 진행하고,
           # 에러 본문(stdout)을 로그에 남겨 원인을 알 수 있게 한다.
           claude -p "ok" --model claude-sonnet-5 --output-format json || \

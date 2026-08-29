@@ -161,9 +161,21 @@ def extract_leetcode_topics(problem_dir_name: str) -> list[str]:
     if not readme.exists():
         return []
 
+    content = readme.read_text(encoding="utf-8")
+
+    # README 상단에는 프로젝트 설명이 있고 그 아래 LeetHub가 관리하는 토픽 블록이 온다.
+    # 설명 쪽 "## 제목"이 토픽으로 잡히지 않도록 마커 사이만 본다.
+    block = re.search(
+        r"<!---LeetCode Topics Start-->(.*?)<!---LeetCode Topics End-->",
+        content,
+        re.DOTALL,
+    )
+    if block:
+        content = block.group(1)
+
     topics: list[str] = []
     current: str | None = None
-    for line in readme.read_text(encoding="utf-8").splitlines():
+    for line in content.splitlines():
         heading = re.match(r"^##\s+(.+?)\s*$", line)
         if heading:
             current = heading.group(1)

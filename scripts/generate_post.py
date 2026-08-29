@@ -251,8 +251,11 @@ def call_claude_code(system_prompt: str, user_message: str) -> str:
         sys.exit(1)
 
     if result.returncode != 0:
+        # claude CLI는 인증 실패 등의 에러 메시지를 stderr가 아니라 stdout으로 내보내는
+        # 경우가 있다. 둘 다 찍어야 CI 로그에서 원인을 알 수 있다.
         print(f"[에러] claude -p 실행 실패 (exit code {result.returncode})")
-        print(result.stderr.strip())
+        print(f"[stderr] {result.stderr.strip() or '(비어 있음)'}")
+        print(f"[stdout] {result.stdout.strip() or '(비어 있음)'}")
         sys.exit(1)
 
     try:
@@ -260,6 +263,7 @@ def call_claude_code(system_prompt: str, user_message: str) -> str:
     except json.JSONDecodeError:
         print("[에러] claude -p 출력이 JSON 형식이 아닙니다. 원본 출력:")
         print(result.stdout)
+        print(f"[stderr] {result.stderr.strip() or '(비어 있음)'}")
         sys.exit(1)
 
     if response.get("is_error"):

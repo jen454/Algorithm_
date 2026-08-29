@@ -32,6 +32,18 @@ jobs:
       - name: Install Claude Code CLI
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Verify Claude auth (smoke test)
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          claude --version
+          # 시크릿 값이 비어 있거나 앞뒤 공백/개행이 섞이면 인증이 실패한다.
+          echo "token length: ${#CLAUDE_CODE_OAUTH_TOKEN}"
+          # 실제 호출이 되는지 최소 프롬프트로 확인. 실패해도 본 작업은 계속 진행하고,
+          # 에러 본문(stdout)을 로그에 남겨 원인을 알 수 있게 한다.
+          claude -p "ok" --model claude-sonnet-5 --output-format json || \
+            echo "::warning::claude 인증 스모크 테스트 실패 (위 출력 확인)"
+
       - name: Detect changed problem directories
         id: detect
         env:

@@ -27,6 +27,7 @@
 | ------- | ------- |
 | [0013-roman-to-integer](https://github.com/jen454/Algorithm_/tree/main/0013-roman-to-integer/) | Easy |
 | [0014-longest-common-prefix](https://github.com/jen454/Algorithm_/tree/main/0014-longest-common-prefix/) | Easy |
+| [0020-valid-parentheses](https://github.com/jen454/Algorithm_/tree/main/0020-valid-parentheses/) | Easy |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
 | [0412-fizz-buzz](https://github.com/jen454/Algorithm_/tree/master/0412-fizz-buzz) |
 ## Simulation
@@ -48,4 +49,12 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0014-longest-common-prefix](https://github.com/jen454/Algorithm_/tree/main/0014-longest-common-prefix/) | Easy |
+## Stack
+| Problem Name | Difficulty |
+| ------- | ------- |
+| [0020-valid-parentheses](https://github.com/jen454/Algorithm_/tree/main/0020-valid-parentheses/) | Easy |
+## Bracket Sequences
+| Problem Name | Difficulty |
+| ------- | ------- |
+| [0020-valid-parentheses](https://github.com/jen454/Algorithm_/tree/main/0020-valid-parentheses/) | Easy |
 <!---LeetCode Topics End-->

@@ -432,11 +432,25 @@ def extract_title_from_readme(readme_content: str) -> str | None:
         '# [level 1] 크기가 작은 부분문자열 - 147355' -> '크기가 작은 부분문자열'
         '<h2><a href="...">3069. Distribute...</a></h2><h3>Easy</h3>...' -> 'Distribute...'
     """
-    # leetcode-sync/BaekjoonHub README는 전체가 한 줄짜리 HTML인 경우가 있다.
+    # BaekjoonHub(백준/프로그래머스)는 첫 줄에 "# [level 1] 삼총사 - 131705" 형태의
+    # 마크다운 헤딩을 넣는다. 이 경우 그게 곧 제목이므로 가장 먼저 확인한다.
+    # (본문에 <h5>제한사항</h5> 같은 HTML 헤딩이 섞여 있어서, HTML을 먼저 보면
+    #  그쪽이 제목으로 잡히는 문제가 있었다.)
+    for line in readme_content.splitlines():
+        if not line.strip():
+            continue
+        if line.lstrip().startswith("#"):
+            title = clean_title_text(line)
+            if title:
+                return title
+        break
+
+    # LeetHub README는 전체가 한 줄짜리 HTML이다.
     # 줄 단위로 태그만 벗기면 <h2>/<h3>/<p> 텍스트가 전부 이어붙으므로,
-    # 첫 HTML 헤딩(<h1>~<h6>)의 내용만 먼저 뽑아본다.
+    # 제목 수준의 헤딩(<h1>~<h3>)에서 내용을 뽑는다.
+    # <h4>~<h6>은 본문 소제목이라 제외한다.
     html_heading = re.search(
-        r"<h[1-6][^>]*>(.*?)</h[1-6]>", readme_content, re.IGNORECASE | re.DOTALL
+        r"<h[1-3][^>]*>(.*?)</h[1-3]>", readme_content, re.IGNORECASE | re.DOTALL
     )
     if html_heading:
         title = clean_title_text(html_heading.group(1))
@@ -470,11 +484,25 @@ def escape_hashtag_line(text: str) -> str:
     return "\n".join(lines) + "\n"
 
 
-def guess_problem_url(platform: str, problem_dir_name: str) -> str:
+def extract_problem_url_from_readme(readme_content: str | None) -> str | None:
+    """BaekjoonHub README 상단의 "[문제 링크](url)"에서 URL을 뽑는다."""
+    if not readme_content:
+        return None
+    match = re.search(r"\[문제 링크\]\((https?://[^)\s]+)\)", readme_content)
+    return match.group(1) if match else None
+
+
+def guess_problem_url(
+    platform: str, problem_dir_name: str, readme_content: str | None = None
+) -> str:
     if platform == "leetcode":
         slug = slugify_title(problem_dir_name)
         return f"https://leetcode.com/problems/{slug}/"
-    return "(문제 링크를 note.md 또는 여기에 직접 채워주세요)"
+
+    # 백준/프로그래머스는 폴더명만으로 URL을 만들 수 없지만,
+    # BaekjoonHub가 README에 문제 링크를 넣어주므로 그걸 쓴다.
+    url = extract_problem_url_from_readme(readme_content)
+    return url or "(문제 링크를 note.md 또는 여기에 직접 채워주세요)"
 
 
 def main():
@@ -523,7 +551,7 @@ def main():
         problem_title = extract_title_from_readme(readme_content)
     if not problem_title:
         problem_title = strip_leading_number(slugify_title(problem_dir.name).replace("-", " "))
-    problem_url = guess_problem_url(platform, problem_dir.name)
+    problem_url = guess_problem_url(platform, problem_dir.name, readme_content)
 
     system_prompt = SYSTEM_PROMPT.format(
         platform=PLATFORM_LABEL.get(platform, platform),

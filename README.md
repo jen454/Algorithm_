@@ -4,6 +4,7 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0001-two-sum](https://github.com/jen454/Algorithm_/tree/main/0001-two-sum/) | Easy |
+| [0014-longest-common-prefix](https://github.com/jen454/Algorithm_/tree/main/0014-longest-common-prefix/) | Easy |
 | [1480-running-sum-of-1d-array](https://github.com/jen454/Algorithm_/tree/master/1480-running-sum-of-1d-array) |
 | [1672-richest-customer-wealth](https://github.com/jen454/Algorithm_/tree/master/1672-richest-customer-wealth) |
 | [3069-distribute-elements-into-two-arrays-i](https://github.com/jen454/Algorithm_/tree/main/LeetCode/Easy/3069-distribute-elements-into-two-arrays-i/) | Easy |
@@ -25,6 +26,7 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0013-roman-to-integer](https://github.com/jen454/Algorithm_/tree/main/0013-roman-to-integer/) | Easy |
+| [0014-longest-common-prefix](https://github.com/jen454/Algorithm_/tree/main/0014-longest-common-prefix/) | Easy |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
 | [0412-fizz-buzz](https://github.com/jen454/Algorithm_/tree/master/0412-fizz-buzz) |
 ## Simulation
@@ -42,4 +44,8 @@
 | Problem Name | Difficulty |
 | ------- | ------- |
 | [0383-ransom-note](https://github.com/jen454/Algorithm_/tree/main/0383-ransom-note/) | Easy |
+## Trie
+| Problem Name | Difficulty |
+| ------- | ------- |
+| [0014-longest-common-prefix](https://github.com/jen454/Algorithm_/tree/main/0014-longest-common-prefix/) | Easy |
 <!---LeetCode Topics End-->

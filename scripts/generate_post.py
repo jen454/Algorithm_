@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """
 generate_post.py
 
@@ -117,6 +118,61 @@ def find_readme_file(problem_dir: Path) -> Path | None:
     return None
 
 
+# LeetHub가 루트 README.md에 쌓는 토픽 이름 -> 블로그 해시태그용 한글 표기.
+# 여기에 없는 토픽은 Claude가 문맥에 맞게 옮긴다.
+TOPIC_KO = {
+    "Array": "배열",
+    "String": "문자열",
+    "Hash Table": "해시맵",
+    "Math": "수학",
+    "Stack": "스택",
+    "Queue": "큐",
+    "Two Pointers": "투포인터",
+    "Binary Search": "이진탐색",
+    "Sorting": "정렬",
+    "Greedy": "그리디",
+    "Dynamic Programming": "다이나믹프로그래밍",
+    "Recursion": "재귀",
+    "Simulation": "시뮬레이션",
+    "Prefix Sum": "누적합",
+    "Matrix": "행렬",
+    "Counting": "카운팅",
+    "Sliding Window": "슬라이딩윈도우",
+    "Linked List": "연결리스트",
+    "Tree": "트리",
+    "Binary Tree": "이진트리",
+    "Graph": "그래프",
+    "Depth-First Search": "DFS",
+    "Breadth-First Search": "BFS",
+    "Heap (Priority Queue)": "힙",
+    "Bit Manipulation": "비트연산",
+    "Backtracking": "백트래킹",
+}
+
+
+def extract_leetcode_topics(problem_dir_name: str) -> list[str]:
+    """루트 README.md의 "LeetCode Topics" 표에서 이 문제가 속한 토픽들을 뽑는다.
+
+    LeetHub는 루트 README.md에 "## <토픽>" 섹션별 표를 누적으로 쌓고,
+    각 행에 "[<문제 폴더명>](링크)" 형태로 문제를 넣는다.
+    따라서 문제 폴더명이 들어있는 행의 상위 "## 토픽"을 모으면 된다.
+    """
+    readme = REPO_ROOT / "README.md"
+    if not readme.exists():
+        return []
+
+    topics: list[str] = []
+    current: str | None = None
+    for line in readme.read_text(encoding="utf-8").splitlines():
+        heading = re.match(r"^##\s+(.+?)\s*$", line)
+        if heading:
+            current = heading.group(1)
+            continue
+        if current and f"[{problem_dir_name}]" in line and current not in topics:
+            topics.append(current)
+    return topics
+
+
 def find_note_file(problem_dir: Path) -> Path | None:
     """레거시 지원: note.md가 남아있으면 참고 자료로 추가 사용."""
     note_path = problem_dir / "note.md"
@@ -147,11 +203,12 @@ SYSTEM_PROMPT = """당신은 알고리즘 문제 풀이를 기술 블로그 글�
 
 ## 전체코드
 ```{language}
-(코드 로직/구조는 원본 그대로 유지하되, 풀이 설명이 될 만한 주석은 추가하거나 보강해도 됩니다)
+(코드 로직/구조는 원본 그대로 유지하되, 풀이 설명이 될 만한 주석은 추가하거나 보강해도 됩니다.
+ 단, 작성자가 접근방식을 정리해둔 메모 성격의 주석 블록은 여기에 옮기지 마세요.)
 ```
 
 #태그1 #태그2
-(마지막 줄은 위 예시처럼 `#`으로 시작하는 태그 2~3개를 공백으로 구분해 한 줄로만 씁니다. "추천 태그:" 같은 접두사나 라벨, 헤더, 불릿은 절대 붙이지 마세요. 줄 전체가 `#`으로 시작해야 합니다. 태그는 코드의 실제 로직에서 확인되는 알고리즘 개념/자료구조만 다세요. 예: 배열을 순회하며 조건 비교만 하면 "#배열" "#시뮬레이션", 두 포인터가 양 끝에서 좁혀오면 "#투포인터", 매 단계 최적을 선택해 전체 최적을 구성하면 "#그리디" 등. 코드에 실제로 쓰이지 않은 기법을 그럴듯해 보인다고 갖다 붙이지 마세요.)
+(마지막 줄은 위 예시처럼 `#`으로 시작하는 태그 2~3개를 공백으로 구분해 한 줄로만 씁니다. "추천 태그:" 같은 접두사나 라벨, 헤더, 불릿은 절대 붙이지 마세요. 줄 전체가 `#`으로 시작해야 합니다. 태그를 고를 때는 아래 "LeetCode 토픽"이 주어졌다면 그것을 1순위 후보로 삼되, **코드에 실제로 쓰인 것만** 고르세요. LeetCode 토픽에는 이 풀이가 쓰지 않은 다른 접근법(예: 배열로 푼 문제에 붙은 "Trie", "Dynamic Programming")도 섞여 있으므로 그대로 옮기지 말고 걸러내야 합니다. 토픽이 없거나 코드와 맞는 게 없으면 코드 로직에서 직접 판단하세요. 태그는 코드의 실제 로직에서 확인되는 알고리즘 개념/자료구조만 다세요. 예: 배열을 순회하며 조건 비교만 하면 "#배열" "#시뮬레이션", 두 포인터가 양 끝에서 좁혀오면 "#투포인터", 매 단계 최적을 선택해 전체 최적을 구성하면 "#그리디" 등. 코드에 실제로 쓰이지 않은 기법을 그럴듯해 보인다고 갖다 붙이지 마세요.)
 
 중요한 규칙:
 - 마크다운 헤더(`#`, `##`, `###`)는 위 세 섹션 제목("문제접근", "풀이", "전체코드")에만 사용하세요. 그 외에는 절대 헤더를 만들지 마세요 (소제목이 필요하면 볼드체를 사용). 단 맨 마지막 태그 줄은 헤더가 아니라 해시태그이므로 `#태그1 #태그2` 형태 그대로 씁니다.
@@ -168,6 +225,9 @@ SYSTEM_PROMPT = """당신은 알고리즘 문제 풀이를 기술 블로그 글�
 - 주석이 짧은 키워드나 단편적인 메모 수준이어도, 그 내용을 벗어나지 않는 선에서 자연스러운 설명체 문장으로 풀어써도 됩니다. 다만 주석에 없는 새로운 판단 근거나 비교를 창작하지는 마세요.
 - 주석이 거의 없어서 접근방식을 알 수 없는 경우, 코드 구조 자체(변수명, 로직 흐름)에서 합리적으로 추론 가능한 범위까지만 서술하고, 과도하게 확신에 찬 어조로 추측하지 마세요.
 - README(문제 설명)는 "문제접근" 섹션 도입부에서 문제가 무엇을 요구하는지 설명하는 데 사용하세요. 코드 주석과 결합해서 왜 그런 접근을 택했는지 자연스럽게 이어지도록 구성하세요.
+- **접근 메모 주석은 전체코드에 넣지 마세요(중요)**: 작성자가 풀이 전에 생각을 정리해둔 메모성 주석(주로 파일 맨 위나 맨 아래에 여러 줄로 몰려 있고, 특정 코드 줄을 설명하는 게 아니라 전체 접근방식/판단을 서술하는 주석)은 "문제접근"과 "풀이" 섹션을 쓰는 근거로만 사용하고, "전체코드" 섹션에서는 삭제하세요. 같은 내용이 본문과 코드에 중복되면 글이 지저분해집니다.
+  - 반대로 특정 코드 줄의 동작을 설명하는 인라인 주석은 남기거나 보강해도 됩니다.
+  - 메모 주석을 지운 자리에 생긴 불필요한 빈 줄도 함께 정리해서, 코드블록이 코드로 끝나도록 하세요.
 - 코드의 로직과 구조(변수명, 흐름, 알고리즘 자체)는 원본 그대로 유지하고 절대 바꾸지 마세요. 다만 "풀이" 섹션에서 설명한 논리를 코드 안에서도 바로 이해할 수 있도록, 원본에 없던 설명 주석을 추가하거나 짧은 원본 주석을 보강해도 됩니다. 단, 이 주석 역시 코드 주석/README에 실제로 근거한 내용만 담아야 하며 새로운 사실을 지어내지 마세요.
 - 문체는 "~함", "~했음", "~판단함" 같은 개조식 종결어미를 섞어 담백한 기술 블로그 톤을 유지하세요.
 - "막힌 점 / 배운 점" 같은 섹션은 만들지 마세요. 위 세 섹션(문제접근/풀이/전체코드) 외에는 아무것도 추가하지 마세요.
@@ -180,6 +240,7 @@ def build_user_message(
     language: str,
     readme_content: str | None,
     legacy_note_content: str | None,
+    topics: list[str] | None = None,
 ) -> str:
     parts = [f"## 문제명\n{problem_title}\n"]
     parts.append(f"## 코드 ({language}) — 주석에 접근방식/풀이 로직이 담겨 있음\n```{language}\n{code}\n```\n")
@@ -188,6 +249,15 @@ def build_user_message(
         parts.append(f"## README (문제 설명)\n{readme_content}\n")
     else:
         parts.append("README가 없습니다. 코드와 문제명만으로 문제 맥락을 최대한 파악하세요.\n")
+
+    if topics:
+        # 한글 표기를 함께 주되, 매핑에 없으면 원문 그대로 넘겨 문맥에 맞게 옮기도록 한다.
+        rendered = ", ".join(f"{t} ({TOPIC_KO[t]})" if t in TOPIC_KO else t for t in topics)
+        parts.append(
+            f"## LeetCode 토픽 (해시태그 후보)\n{rendered}\n"
+            "이 중 코드에 실제로 쓰인 것만 골라 해시태그로 쓰세요. "
+            "이 풀이가 사용하지 않은 접근법은 제외합니다.\n"
+        )
 
     if legacy_note_content:
         parts.append(
@@ -250,6 +320,11 @@ def call_claude_code(system_prompt: str, user_message: str) -> str:
         MODEL,
         "--output-format",
         "json",
+        # 이 호출은 텍스트 생성만 하면 된다. 리포지토리 안에서 실행되기 때문에
+        # 도구를 열어두면 기존 posts/ 파일을 직접 고치려 들고, 그 과정에서
+        # 권한 거부 안내문이 결과로 돌아와 포스트를 덮어쓰는 일이 생긴다.
+        "--disallowed-tools",
+        "Read,Write,Edit,Glob,Grep,Bash,WebFetch,WebSearch,Task,NotebookEdit",
     ]
 
     print("[호출] Claude Code(claude -p) 요청 중... (구독 사용량 사용)")
@@ -445,8 +520,13 @@ def main():
         language=language,
         language_display=LANG_DISPLAY.get(language, language.capitalize()),
     )
+    # 토픽은 LeetHub가 루트 README.md에 쌓는 값이라 LeetCode에만 존재한다.
+    topics = extract_leetcode_topics(problem_dir.name) if platform == "leetcode" else []
+    if topics:
+        print(f"[찾음] LeetCode 토픽: {', '.join(topics)}")
+
     user_message = build_user_message(
-        problem_title, code, language, readme_content, legacy_note_content
+        problem_title, code, language, readme_content, legacy_note_content, topics
     )
 
     result_text = call_claude_code(system_prompt, user_message)

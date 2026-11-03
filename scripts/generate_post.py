@@ -505,6 +505,23 @@ def guess_problem_url(
     return url or "(문제 링크를 note.md 또는 여기에 직접 채워주세요)"
 
 
+def resolve_problem_title(problem_dir: Path, readme_content: str | None) -> str:
+    """README에서 제목을 뽑고, 없으면 폴더명으로 대신한다."""
+    title = extract_title_from_readme(readme_content) if readme_content else None
+    return title or strip_leading_number(slugify_title(problem_dir.name).replace("-", " "))
+
+
+def safe_filename_slug(text: str) -> str:
+    # 파일명에 쓸 수 없는 문자 제거, 공백은 하이픈으로
+    text = re.sub(r"[\\/:*?\"<>|]", "", text)
+    return re.sub(r"\s+", "-", text.strip())
+
+
+def output_path_for(platform: str, problem_title: str) -> Path:
+    """포스트 저장 경로. 생성과 누락 검사가 같은 규칙을 쓰도록 한 곳에서 정한다."""
+    return POSTS_DIR / f"{platform}-{safe_filename_slug(problem_title)}.md"
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("problem_dir", type=str, help="문제 폴더 경로")
@@ -514,6 +531,11 @@ def main():
         default=None,
         help="플랫폼 강제 지정 (자동 판별을 덮어씀)",
     )
+    parser.add_argument(
+        "--print-output-path",
+        action="store_true",
+        help="Claude를 호출하지 않고 이 문제의 포스트가 저장될 경로만 출력 (워크플로우의 누락 검사용)",
+    )
     args = parser.parse_args()
 
     problem_dir = Path(args.problem_dir).resolve()
@@ -522,6 +544,14 @@ def main():
         sys.exit(1)
 
     platform = detect_platform(problem_dir, args.platform)
+
+    if args.print_output_path:
+        # 워크플로우가 stdout을 경로로 그대로 쓰므로 다른 출력은 내지 않는다.
+        readme_file = find_readme_file(problem_dir)
+        readme_content = readme_file.read_text(encoding="utf-8") if readme_file else None
+        print(output_path_for(platform, resolve_problem_title(problem_dir, readme_content)))
+        return
+
     print(f"[판별] 플랫폼: {PLATFORM_LABEL.get(platform, platform)}")
 
     solution_file = find_solution_file(problem_dir)
@@ -546,11 +576,7 @@ def main():
 
     code = solution_file.read_text(encoding="utf-8")
     language = EXT_TO_LANG.get(solution_file.suffix, "text")
-    problem_title = None
-    if readme_content:
-        problem_title = extract_title_from_readme(readme_content)
-    if not problem_title:
-        problem_title = strip_leading_number(slugify_title(problem_dir.name).replace("-", " "))
+    problem_title = resolve_problem_title(problem_dir, readme_content)
     problem_url = guess_problem_url(platform, problem_dir.name, readme_content)
 
     system_prompt = SYSTEM_PROMPT.format(
@@ -572,13 +598,7 @@ def main():
     result_text = call_claude_code(system_prompt, user_message)
 
     POSTS_DIR.mkdir(parents=True, exist_ok=True)
-    def safe_filename_slug(text: str) -> str:
-        # 파일명에 쓸 수 없는 문자 제거, 공백은 하이픈으로
-        text = re.sub(r"[\\/:*?\"<>|]", "", text)
-        return re.sub(r"\s+", "-", text.strip())
-
-    output_name = f"{platform}-{safe_filename_slug(problem_title)}.md"
-    output_path = POSTS_DIR / output_name
+    output_path = output_path_for(platform, problem_title)
     output_path.write_text(escape_hashtag_line(result_text), encoding="utf-8")
 
     print(f"[완료] 저장됨: {output_path}")

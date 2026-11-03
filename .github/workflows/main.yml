@@ -174,7 +174,11 @@ jobs:
             fi
 
             echo "=== generate_post.py \"$dir\" ==="
-            python scripts/generate_post.py "$dir" || echo "::warning::포스트 생성 실패(계속 진행): $dir"
+            # 한 폴더가 실패해도 나머지는 계속 만들고, 실패 목록은 마지막 스텝에서 job 실패로 드러낸다.
+            if ! python scripts/generate_post.py "$dir"; then
+              echo "::warning::포스트 생성 실패(계속 진행): $dir"
+              echo "$dir" >> /tmp/failed.txt
+            fi
           done
 
       - name: Commit and push generated posts
@@ -204,3 +208,14 @@ jobs:
 
           echo "Push failed after 3 attempts"
           exit 1
+
+      # 생성 실패를 경고로만 남기면 토큰 만료 같은 문제가 있어도 CI가 초록불로 끝난다.
+      # 성공한 초안은 위에서 이미 push했으므로, 여기서 실패를 job 결과에 반영한다.
+      - name: Fail if any post generation failed
+        run: |
+          if [ -s /tmp/failed.txt ]; then
+            echo "::error::포스트 생성에 실패한 폴더가 있습니다:"
+            cat /tmp/failed.txt
+            exit 1
+          fi
+          echo "생성 실패 없음"

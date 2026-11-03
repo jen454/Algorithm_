@@ -22,7 +22,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # 직전 커밋과 비교하기 위해 최소 2개 필요
+          fetch-depth: 0  # 최근 7일 커밋에서 누락된 초안을 찾고, push 전 rebase하기 위해 전체 히스토리 필요
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -93,6 +93,25 @@ jobs:
             | awk -F/ 'NF >= 3 { print $1 "/" $2 "/" $3 }' \
             | sort -u > /tmp/dirs.txt || true
 
+          # concurrency 그룹은 대기 실행을 1개만 유지하고, 새 실행이 오면 이전 대기 실행을 취소한다.
+          # 취소된 push의 diff는 다시 보지 않으므로, 최근 7일 안에 바뀐 문제 폴더 중
+          # 초안이 아직 없는 것도 대상에 넣어 다음 실행에서 메운다.
+          # (7일로 제한해 파이프라인 이전에 푼 옛 문제까지 한꺼번에 생성되지 않게 한다.)
+          git -c core.quotePath=false log --since="7 days ago" --name-only --pretty=format: -- 백준 프로그래머스 \
+            | grep -E '^(백준|프로그래머스)/' \
+            | awk -F/ 'NF >= 3 { print $1 "/" $2 "/" $3 }' \
+            | sort -u > /tmp/recent.txt || true
+
+          while IFS= read -r dir; do
+            [ -n "$dir" ] && [ -d "$dir" ] || continue
+            out="$(python scripts/generate_post.py "$dir" --print-output-path 2>/dev/null)" || continue
+            if [ ! -f "$out" ]; then
+              echo "초안 누락 -> 대상에 추가: $dir"
+              echo "$dir" >> /tmp/dirs.txt
+            fi
+          done < /tmp/recent.txt
+          sort -u -o /tmp/dirs.txt /tmp/dirs.txt
+
           echo "--- 대상 문제 폴더 ---"
           cat /tmp/dirs.txt
 
@@ -129,7 +148,11 @@ jobs:
             fi
 
             echo "=== generate_post.py \"$dir\" ==="
-            python scripts/generate_post.py "$dir" || echo "::warning::포스트 생성 실패(계속 진행): $dir"
+            # 한 폴더가 실패해도 나머지는 계속 만들고, 실패 목록은 마지막 스텝에서 job 실패로 드러낸다.
+            if ! python scripts/generate_post.py "$dir"; then
+              echo "::warning::포스트 생성 실패(계속 진행): $dir"
+              echo "$dir" >> /tmp/failed.txt
+            fi
           done < /tmp/dirs.txt
 
       - name: Commit and push generated posts
@@ -145,10 +168,6 @@ jobs:
           git add posts/
           git commit -m "docs: auto-generate blog post draft"
 
-          # checkout이 fetch-depth: 2(shallow)라 이 상태로 rebase하면 공통 조상을 못 찾을 수 있다.
-          # push 전에 전체 히스토리를 받아 shallow 상태를 푼다.
-          git fetch --unshallow origin main 2>/dev/null || git fetch origin main
-
           # 다른 워크플로우(LeetCode 이동 등)와 겹칠 수 있으므로 rebase 후 재시도.
           for attempt in 1 2 3; do
             git fetch origin main
@@ -163,3 +182,14 @@ jobs:
 
           echo "Push failed after 3 attempts"
           exit 1
+
+      # 생성 실패를 경고로만 남기면 토큰 만료 같은 문제가 있어도 CI가 초록불로 끝난다.
+      # 성공한 초안은 위에서 이미 push했으므로, 여기서 실패를 job 결과에 반영한다.
+      - name: Fail if any post generation failed
+        run: |
+          if [ -s /tmp/failed.txt ]; then
+            echo "::error::포스트 생성에 실패한 폴더가 있습니다:"
+            cat /tmp/failed.txt
+            exit 1
+          fi
+          echo "생성 실패 없음"
